@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en-GB"><head><meta charset="utf-8"><title>The Corner Hub – CTEC Business Skills</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+</head><body><script type="module">
+import * as THREE from 'three';
+/* THE CORNER HUB – three-screen Igloo layout. Add #debug to the URL for the input log + screen-join markers.
+   Screens: 3974 / 3588 / 3974 px wide x 2160. Yaw 0 = centre of Screen 2; +yaw = right (Screen 3). */
+const Q=location.hash.includes('debug');
+const W=[3974,3588,3974],DEG=360/(W[0]+W[1]+W[2]),HALF=W[1]*DEG/2,C1=-(HALF+W[0]*DEG/2),C3=-C1;
+let UI=1,HN=0,CAL=0;
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.xr.enabled=true;document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x182641);scene.fog=new THREE.Fog(0x182641,16,45);
+const cam=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,100);cam.position.set(0,1.6,0);cam.rotation.order='YXZ';
+const world=new THREE.Group(),rot=new THREE.Group();scene.add(world);world.add(rot);
+const S='"Segoe UI","Noto Color Emoji",Arial,sans-serif';
+const mat=c=>new THREE.MeshStandardMaterial({color:c,roughness:.8});
+const polar=(r,y,h)=>{const a=y*Math.PI/180;return[r*Math.sin(a),h,-r*Math.cos(a)]};
+function box(w,h,d,c,yaw,r,y){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(c));o.position.set(...polar(r,yaw,y));o.lookAt(0,y,0);rot.add(o);return o}
+
+/* ---------- scenery ---------- */
+rot.add(new THREE.HemisphereLight(0xfff0dd,0x223355,1.5));
+[0,C1,C3].forEach((y,i)=>{const l=new THREE.PointLight([0xffc27a,0x9fd8ff,0xaaffbb][i],28,20,2);l.position.set(...polar(3.5,y,3.5));rot.add(l)});
+const gr=new THREE.Mesh(new THREE.CircleGeometry(45,48),mat(0x3a4150));gr.rotation.x=-Math.PI/2;rot.add(gr);
+for(let i=0;i<12;i++){const y=i*30+15,c=[0xe11d48,0xf59e0b,0x14b8a6,0x6366f1][i%4];box(2.4,2,1.4,0x57534e,y,11,1);box(3,.18,1.9,c,y,10.8,2.2)}
+box(3,.9,.7,0x8b5a2b,0,3,.45);box(3.3,.06,1,0xfef3c7,0,3,.93);box(2.4,.8,1,0x475569,C1,3,.4);box(1.6,.06,.7,0xe2e8f0,C1,2.4,.83);
+const bl=new THREE.InstancedMesh(new THREE.SphereGeometry(.12,8,6),new THREE.MeshBasicMaterial({color:0xffffff}),90),dm=new THREE.Object3D();
+for(let i=0;i<90;i++){const a=i/90*Math.PI*2;dm.position.set(10*Math.sin(a),5.7+.25*Math.sin(i*1.7),-10*Math.cos(a));dm.updateMatrix();bl.setMatrixAt(i,dm.matrix);bl.setColorAt(i,new THREE.Color().setHSL(i*.13%1,.8,.6))}rot.add(bl);
+if(Q)[HALF,-HALF,180].forEach(y=>{const o=new THREE.Mesh(new THREE.BoxGeometry(.08,6,.08),new THREE.MeshBasicMaterial({color:0xff0044}));o.position.set(...polar(6.4,y,2.5));rot.add(o)});
+const cust=[];
+function mkC(){const g=new THREE.Group(),b=new THREE.Mesh(new THREE.CapsuleGeometry(.22,.7,4,8),mat(new THREE.Color().setHSL(Math.random(),.6,.55))),h=new THREE.Mesh(new THREE.SphereGeometry(.17,12,8),mat(0xf1c9a5));b.position.y=.6;h.position.y=1.3;g.add(b,h);g.userData={a:HALF+8+Math.random()*(172-HALF-8),v:(Math.random()<.5?-1:1)*(3+Math.random()*4),r:3.6+Math.random()*2.2,ph:Math.random()*6};rot.add(g);return g}
+
+/* ---------- 3D text panels (canvas textures; no HTML overlays) ---------- */
+const PPM=300,pan=[];
+function mk(w,h,yaw,y,src){let o;if(src){o=new THREE.Mesh(src.geometry,src.material);o.userData=src.userData}else{const c=document.createElement('canvas');c.width=w*PPM;c.height=h*PPM;const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;o=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:t,transparent:true}));o.userData={t,x:c.getContext('2d'),w:c.width,h:c.height}}
+ o.position.set(...polar(6,yaw,y));o.lookAt(0,y,0);rot.add(o);pan.push(o);return o}
+function rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath()}
+function txt(x,s,a,b,w,sz,col,al='left',bd=1){x.font=(bd?'700 ':'400 ')+sz+'px '+S;x.fillStyle=col;x.textAlign=al;x.textBaseline='top';const lh=sz*1.22,ax=al=='center'?a+w/2:al=='right'?a+w:a;let y=b;
+ for(const p of String(s).split('\n')){let ln='';for(const wd of p.split(' ')){const t=ln?ln+' '+wd:wd;if(x.measureText(t).width>w&&ln){x.fillText(ln,ax,y);y+=lh;ln=wd}else ln=t}x.fillText(ln,ax,y);y+=lh}return y}
+const draw=(o,f)=>{const u=o.userData;u.x.clearRect(0,0,u.w,u.h);f(u.x,u.w,u.h);u.t.needsUpdate=true};
+const bg=(x,w,h,c,ac)=>{rr(x,6,6,w-12,h-12,36);x.fillStyle=c;x.fill();x.lineWidth=10;x.strokeStyle=ac;x.stroke()};
+const bar=mk(7,1.1,0,.4);mk(0,0,C1,.4,bar);mk(0,0,C3,.4,bar);           /* "Always Bar" on all 3 screens */
+const sb=mk(4,3.1,C1-26,2.5),br=mk(4.6,3.4,C1+20,2.7);                  /* Screen 1: scoreboard + brief */
+const ti=mk(8,1.3,0,4.3),cd=[-29.5,0,29.5].map(y=>mk(2.9,2.6,y,2.3));   /* Screen 2: title + 3 decision cards */
+const tk=mk(5.4,3.2,C3,3.0);                                            /* Screen 3: customers / feedback */
+const db=Q?mk(3.6,1.8,-42,5):null;
+
+/* ---------- content ---------- */
+const M=[['💷','Cash'],['😊','Happy customers'],['⭐','Reputation'],['🛒','Sales'],['🤝','Team spirit']],MC=['#fbbf24','#fb923c','#facc15','#4ade80','#2dd4bf'];
+const RL=[['Team Lead','“Let’s hear from everyone first.”'],['Money Keeper','“If we spend that, we’ll have £__ left.”'],['Customer Champion','“What would the customer want?”'],['Marketing Maker','“Who are we trying to reach?”'],['Planner','“What matters most right now?”'],['Fairness Check','“Would customers be happy to see this?”']];
+const SKM={t:['Communication & teamwork','Everyone spoke up and listened.','Invite quieter voices before voting.'],c:['Customer service','You listened to what customers needed.','Ask what the customer needs first.'],m:['Marketing','Your message matched your audience.','Match audience, channel and message.'],b:['Budgeting','You kept money back for surprises.','Keep a reserve and track spending.'],p:['Planning & priorities','You put the right things first.','Rank jobs by what matters most.'],a:['Adapting to change','You stayed calm when plans broke.','Pause, list options, then choose.'],e:['Professional conduct','You chose honesty even when it cost.','Ask: would customers like to see this?']};
+/* option = [heading, detail, [cash,happy,rep,sales,spirit], skillPoints, result text] — sales are added to cash */
+const R=[
+{n:'Plan the Stall',k:'Planning and budgeting',tx:'You have £500. Spend it wisely and keep some back.',g:'Budget: a plan for what you will spend.\nReserve: money kept back for surprises.',st:[
+ {q:'What will you sell?',o:[['Small menu','3 simple items\nCost £120',[-120,0,0,10,0],'b3p1','Simple and cheap. Less choice, less waste.'],['Wide menu','6 items\nCost £200',[-200,5,0,20,0],'b1','More choice, but it costs more.'],['Premium','Fancy specials\nCost £260',[-260,0,5,30,0],'','Big spend! Not much left for surprises.']]},
+ {q:'How many helpers?',o:[['2 helpers','Cost £60',[-60,0,0,0,5],'p2','A sensible team size.'],['4 helpers','Cost £120',[-120,5,0,0,5],'p1b1','Plenty of hands, but pricey.'],['Just us','Free, but busy!',[0,-5,0,0,-10],'','Cheap, but you will be stretched.']]},
+ {q:'What matters most?',o:[['Allergy labels','Cost £20\nSafe for everyone',[-20,0,5,0,0],'p2e1','Customers feel safe. Trust grows.'],['Tidy stall','Cost £20\nLooks welcoming',[-20,5,0,0,0],'p1','It looks great.'],['Big sign','Cost £20\nCatches eyes',[-20,0,0,15,0],'p1m1','More people stop by.']]}]},
+{n:'Know Your Customers',k:'Customer service',tx:'Listen first. What does each customer need?',g:'Customer need: what someone wants or must have.\nListening: asking, then really hearing.',st:[
+ {q:'How do you help Sam?',w:'Sam, a student',say:'“I only have £4 and I’m starving!”',o:[['Meal deal','Filling food for £4',[-10,10,0,20,0],'c3','Sam is delighted!'],['Premium special','Fancy, but £9',[0,-5,0,0,0],'','Too expensive for Sam.'],['Free sample','A taste only',[0,3,0,0,0],'c1','Kind, but Sam is still hungry.']]},
+ {q:'How do you help Priya?',w:'Priya, vegetarian',say:'“I’m allergic to nuts. What is safe for me?”',o:[['Nut-free veggie dish','Show the ingredients',[0,10,5,20,0],'c3e1','Priya trusts you.'],['“Probably fine!”','Guess the answer',[0,-10,-15,0,0],'','Never guess about allergies!'],['“Sorry, can’t help”','Send her away',[0,-5,0,0,0],'c1','Honest, but she leaves.']]},
+ {q:'How do you help Mr Okafor?',w:'Mr Okafor',say:'“My legs ache. Is there somewhere to sit?”',o:[['Chair and blanket','By the stall',[-10,10,5,10,0],'c3','He smiles and stays!'],['“No seating”','Keep serving',[0,-5,0,0,0],'','He walks away.'],['Serve him first','Quick, but no seat',[0,3,0,10,0],'c1','Quick, but still uncomfortable.']]}]},
+{n:'Spread the Word',k:'Marketing and honesty',tx:'Who do you want? How will you reach them? What will you say?',g:'Audience: the people you want to reach.\nChannel: how your message travels.',st:[
+ {q:'Who is your audience?',o:[['Students','Love cheap deals',[0,0,0,25,0],'m2','Students flock over.'],['Families','Want easy meals',[0,5,0,20,0],'m2','Families queue up.'],['Office workers','Quick lunch crowd',[0,0,0,30,0],'m2','A busy lunch crowd.']]},
+ {q:'How will you reach them?',o:[['Poster','Cost £20',[-20,0,0,20,0],'m2','Eye-catching and clear.'],['Social post','Free. Takes effort',[0,0,0,15,0],'m2b1','Free, and people share it.'],['Loudspeaker','Loud and annoying',[0,-5,-5,10,0],'','Neighbours are not happy.']]},
+ {q:'What will your sign say?',h:'Fairness Check: can we prove it?',o:[['“Fresh, made today”','True and clear',[0,0,5,20,0],'m2e2','Honest, so customers trust it.'],['“World’s best coffee!”','Cannot prove it',[0,0,-10,50,0],'m1','Big crowd, but some feel misled.'],['“Cheapest in town!”','Not really true',[0,0,-5,30,0],'','Rival stalls complain.']]}]},
+{n:'The Rush',k:'Adapting to change',tx:'Surprise! Stay calm and decide as a team.',ev:['📞 Supplier: delivery 2 hours late!','🚌 Coach party! 40 hungry visitors!'],g:'Adapt: change your plan when things change.\nPrioritise: decide what comes first.',st:[
+ {q:'What is your first move?',T:90,rb:1,o:[['Emergency stock','Buy nearby\nCost £80',[-80,5,0,60,0],'a2b1','The menu stays full. Costly, but busy!'],['Short menu','Tell the queue honestly',[0,5,5,30,0],'a3e1','Honest and calm. The queue stays kind.'],['Close 20 minutes','Regroup first',[0,-10,-5,-40,0],'','Calm, but customers leave.']]},
+ {q:'Who does what?',T:90,o:[['One job each','Till, food, queue',[0,10,0,20,10],'t3p3a1','Smooth teamwork!'],['Everyone does all','Chaos!',[0,-10,0,-10,-10],'','Jobs overlap and orders get lost.'],['Lead decides alone','No discussion',[0,0,0,10,-15],'','Others feel ignored.']]}]},
+{n:'Complaint and Rival',k:'Customer service',tx:'Stay professional. Fix problems, not blame.',g:'Complaint: a customer saying something went wrong.\nRival: a competing business.',st:[
+ {q:'How do you handle it?',w:'An unhappy customer',say:'“My order was wrong and I waited 20 minutes!”',o:[['Listen, say sorry, fix it','New order + free drink',[-5,10,5,0,0],'c3e1','The customer calms down and thanks you.'],['Refund and move on','Money back',[-15,3,0,0,0],'c2','Fair, but nothing is fixed.'],['“Not our fault!”','Explain why',[0,-10,-10,0,-5],'','The customer leaves angry.']]},
+ {q:'The rival cuts prices 20%',w:'The rival stall',say:'“Everything 20% off!” says their big sign.',o:[['Match their price','Lose some profit',[-15,0,0,10,0],'b1','Customers stay. Profit shrinks.'],['Add value','Free drink with a meal',[-30,10,5,25,0],'c2m1b2','Customers love the extra!'],['Stay the same','Show your quality',[0,0,5,5,0],'m2','Loyal fans stay. Some leave.']]}]},
+{n:'The Big Choices',k:'Ethics and conduct',tx:'Do the right thing, even when it is tempting.',g:'Ethics: choosing what is honest and fair.\nSponsored: promoted in return for a gift or pay.',st:[
+ {q:'An influencer offers a shout-out',w:'The influencer',say:'“Free meals, and I’ll rave about you. Don’t mention they were free!”',o:[['Accept, stay quiet','Hide the free meals',[0,0,-20,80,0],'e0','Big sales… until people find out.'],['Accept, say “sponsored”','Be open about it',[0,0,5,50,0],'e3','Honest, and still good sales.'],['Politely decline','No free meals',[0,0,10,0,0],'e2','Trust grows. No extra sales.']]},
+ {q:'How will you use your profit?',h:'Time to close up the stall.',o:[['Save it','Keep it safe',[0,0,0,0,0],'b2','Safe and steady.'],['Better equipment','Cost £50',[-50,5,0,40,0],'p2','An investment for next time.'],['Local charity','Donate £30',[-30,0,15,0,10],'e2','The community cheers.']]}]}];
+const DQ=['What decision are you proudest of? Why?','When did the team change its mind? What changed it?','How did customers feel at the end? How could you tell?','What did the surprise in Round 4 teach you about planning ahead?','Was there a moment when the honest choice cost something? Was it worth it?','Who did you hear from most? Who could you hear from more?','Which one skill will you practise next? Finish: “Next time I’ll…”'];
+const steps=[];R.forEach((r,i)=>r.st.forEach((s,j)=>steps.push({...s,r:i,j,first:!j,n:r.st.length})));
+const par=s=>{const o={};for(const[,k,d]of(s||'').matchAll(/([a-z])(\d)/g))o[k]=(o[k]||0)+ +d;return o};
+const MX={t:18};steps.forEach(s=>{const b={};s.o.forEach(o=>{const p=par(o[3]);for(const k in p)b[k]=Math.max(b[k]||0,p[k])});for(const k in b)MX[k]=(MX[k]||0)+b[k]});MX.p+=2;
+const star=k=>Math.max(0,Math.min(3,Math.round(3*(G.pts[k]||0)/((MX[k]||1)*.8))));
+
+/* ---------- state + flow ---------- */
+const G={ph:'intro',i:0,sel:-1,pts:{},tk:[0,0,0],tm:0,lt:-1,pz:0,dq:0,voice:1,o:null,say:'',chips:'',ex:'',T1:'',T2:'',K1:'',K2:'',K3:'',BT:'',BI:'',H:'',BD:'',EX:'',end:0};
+const V=[500,50,50,0,50];
+let ac;const snd=(yaw,f=660,d=.25)=>{try{ac=ac||new AudioContext();ac.resume();const o=ac.createOscillator(),g=ac.createGain(),p=ac.createPanner(),a=yaw*Math.PI/180;p.panningModel='HRTF';p.positionX.value=Math.sin(a)*5;p.positionZ.value=-Math.cos(a)*5;o.frequency.value=f;g.gain.setValueAtTime(.15,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);o.connect(g).connect(p).connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}};
+const speak=s=>{try{if(G.voice&&s){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=.95;u.lang='en-GB';speechSynthesis.speak(u)}}catch(e){}};
+const evSnd=()=>{if(R[steps[G.i].r].ev){snd(C1,520,.2);setTimeout(()=>snd(C1,520,.2),300);snd(C3,300,.8)}};
+function render(sp=1){
+ const s=steps[G.i],r=R[s.r],ph=G.ph,rl=RL[G.i%6],tkl='Team ticks:  '+G.tk.map(v=>v?'●':'○').join(' ');G.o=null;G.EX='';
+ if(ph=='intro'){G.T1='🎪 THE CORNER HUB';G.T2='Run a stall people love, without running out of money.';G.o=[['💷 £500','to start your pop-up stall'],['🎯 6 rounds','of real business choices'],['🤝 Decide together','Talk first. Then choose.']];G.K1='Welcome to the market!';G.K2='Customers are arriving. Your team has one day to make it work.';G.K3='';G.BT='Welcome!';G.BI='Press ENTER to open the stall';G.H='How to play';G.BD='Discuss each choice as a team.\nPress 1, 2 or 3, then ENTER to lock it in.\nFacilitator: Q W E are teamwork ticks.';G.say=G.T1+'. '+G.T2}
+ else if(ph=='end'){const ks=Object.keys(SKM).sort((a,b)=>star(b)-star(a)),sc=(Math.min(100,V[0]/5)+V[1]+V[2]+V[4])/4,tier=sc<45?'🥉 Pop-Up Starter':sc<62?'🥈 Rising Stall':sc<80?'🥇 Community Favourite':'🏆 Local Legend';
+  G.T1='Closing time! Your result:';G.T2=tier;G.o=[['✅ Went well',ks.slice(0,2).map(k=>SKM[k][1]).join('\n')],['🔧 Try next time',ks.slice(-2).map(k=>SKM[k][2]).join('\n')],['📊 Final',`💷 £${V[0]}\n😊 ${V[1]}   ⭐ ${V[2]}\n🛒 £${V[3]}   🤝 ${V[4]}`]];
+  const q=DQ[G.dq%DQ.length];G.K1='Reflect together 💬';G.K2=q;G.K3=`Question ${G.dq%DQ.length+1} of ${DQ.length}. ENTER for the next.`;G.BT='Well done, team!';G.BI='ENTER for reflection questions';G.H='Your skill stars';G.BD='';G.end=1;G.say=tier+'. '+q}
+ else{G.end=0;G.H=(ph=='brief'&&r.ev)?r.ev[0]:'🎯 '+r.k;G.BD='🎤 Spotlight: '+rl[0]+'\n'+rl[1];G.EX='📖 '+r.g;
+  if(ph=='brief'){G.T1=`Round ${s.r+1}: ${r.n}`;G.T2=r.tx;G.K1=r.ev?'🚨 Surprise!':'Up next';G.K2=r.ev?r.ev[1]:r.k;G.K3='';G.BT=`Round ${s.r+1}: ${r.n}`;G.BI='Read together. ENTER when ready';G.say=G.T1+'. '+G.T2+' '+(r.ev?r.ev.join('. '):'')}
+  else if(ph=='pick'){G.o=s.o;G.T1=`Round ${s.r+1}: ${r.n}  (${s.j+1}/${s.n})`;G.T2=s.q;G.K1=s.w?s.w+' says:':'Talk it through';G.K2=s.say||s.h||'Hear from everyone, then choose one option.';G.K3='';G.BT=G.T1;G.BI='Discuss. Press 1, 2 or 3, then ENTER';G.say=s.q+'. '+s.o.map((o,i)=>'Option '+(i+1)+': '+o[0]+'. '+o[1].replace('\n','. ')).join(' ')}
+  else{const o=s.o[G.sel];G.o=s.o;G.T1='You chose:';G.T2=o[0];G.K1='What happened';G.K2=o[4]+(G.ex?'  '+G.ex:'');G.K3=G.chips;G.BT='Result';G.BI='ENTER to continue';G.say=o[4]+' '+G.ex}}
+ G.tkl=tkl;dAll();if(sp)speak(G.say)}
+const tmS=()=>{const s=steps[G.i];return G.ph=='pick'&&s.T?(G.tm<=0?'TIME!':Math.floor(Math.ceil(G.tm)/60)+':'+String(Math.ceil(G.tm)%60).padStart(2,'0')):'💷 £'+V[0]};
+function dBar(){draw(bar,(x,w,h)=>{bg(x,w,h,'rgba(10,15,30,.93)','#fbbf24');txt(x,G.BT,40,20,w-560,80,'#fbbf24');txt(x,G.BI,40,150,w-560,70,'#fff',undefined,0);txt(x,tmS(),w-520,60,470,110,'#fff','right')})}
+function dSb(){draw(sb,(x,w,h)=>{bg(x,w,h,'rgba(15,23,42,.93)','#2dd4bf');txt(x,'Team scoreboard',36,24,w-72,84,'#2dd4bf');M.forEach((a,i)=>{const y=150+i*150,v=V[i],p=i==0?v/500:i==3?v/300:v/100;txt(x,a[0]+' '+a[1],40,y,700,64,'#fff');txt(x,i==0||i==3?'£'+v:v,w-400,y,360,70,'#fff','right');rr(x,40,y+80,w-80,34,17);x.fillStyle='#1e293b';x.fill();rr(x,40,y+80,Math.max(34,Math.min(1,p)*(w-80)),34,17);x.fillStyle=MC[i];x.fill()})})}
+function dBr(){draw(br,(x,w,h)=>{bg(x,w,h,'rgba(8,47,73,.93)','#2dd4bf');let y=txt(x,G.H,36,24,w-72,76,'#2dd4bf');
+ if(G.end){Object.keys(SKM).forEach(k=>{txt(x,SKM[k][0],36,y+6,w-330,66,'#fff');txt(x,'★'.repeat(star(k))+'☆'.repeat(3-star(k)),w-330,y,294,74,'#fbbf24','right');y+=92})}
+ else{y=txt(x,G.BD,36,y+10,w-72,66,'#fff',undefined,0);if(G.EX)y=txt(x,G.EX,36,y+14,w-72,58,'#fde68a',undefined,0);if(G.ph!='intro')txt(x,G.tkl,36,h-100,w-72,60,'#99f6e4')}})}
+function dTi(){draw(ti,(x,w,h)=>{bg(x,w,h,'rgba(30,20,10,.93)','#fb923c');txt(x,G.T1,40,18,w-80,76,'#fb923c','center');txt(x,G.T2,40,112,w-80,84,'#fff','center')})}
+const CC=['#f97316','#3b82f6','#a855f7'],SH=['●','▲','■'];
+function dCd(){cd.forEach((c,i)=>{const o=G.o&&G.o[i];c.visible=!!o;if(!o)return;const pk=G.ph=='pick'||G.ph=='result',sel=pk&&G.sel==i,lk=G.ph=='result'&&sel;draw(c,(x,w,h)=>{bg(x,w,h,sel?'#fff7ed':'rgba(15,23,42,.94)',lk?'#22c55e':sel?'#facc15':pk?CC[i]:'#64748b');const dk=sel;if(pk)txt(x,SH[i]+' '+(i+1),30,20,w-60,96,CC[i]);let y=txt(x,o[0],30,pk?130:30,w-60,76,dk?'#111':'#fff');txt(x,o[1],30,y+8,w-60,66,dk?'#333':'#cbd5e1',undefined,0);if(lk)txt(x,'✔ LOCKED IN',30,h-100,w-60,70,'#16a34a')})})}
+function dTk(){draw(tk,(x,w,h)=>{bg(x,w,h,'rgba(5,46,22,.94)','#4ade80');let y=txt(x,G.K1,40,26,w-80,76,'#4ade80');y=txt(x,G.K2,40,y+14,w-80,82,'#fff');if(G.K3)txt(x,G.K3,40,y+18,w-80,70,'#fde68a',undefined,0)})}
+const L=[];const log=s=>{L.unshift(s);L.length=Math.min(L.length,9);dDb()};
+function dDb(){if(db)draw(db,(x,w,h)=>{bg(x,w,h,'rgba(0,0,0,.85)','#f0f');txt(x,`DEBUG ${G.ph} step ${G.i} UI ${UI.toFixed(2)} fps ${fps|0}`,20,14,w-40,44,'#f0f');L.forEach((l,i)=>txt(x,l,20,70+i*50,w-40,40,'#0f0',undefined,0))})}
+function dAll(){dBar();dSb();dBr();dTi();dCd();dTk();dDb()}
+
+function lock(){const s=steps[G.i],o=s.o[G.sel],f=[...o[2]];G.ex='';
+ if(s.rb&&V[0]>=150){f[1]+=5;G.pts.p=(G.pts.p||0)+2;G.ex='Your reserve helped! 😊 +5'}
+ V[0]=Math.max(0,V[0]+f[0]+f[3]);V[3]+=f[3];[1,2,4].forEach(i=>V[i]=Math.max(0,Math.min(100,V[i]+f[i])));
+ const p=par(o[3]);for(const k in p)G.pts[k]=(G.pts[k]||0)+p[k];
+ G.chips=[['💷',f[0],'£'],['😊',f[1],''],['⭐',f[2],''],['🛒',f[3],'£'],['🤝',f[4],'']].filter(a=>a[1]).map(a=>a[0]+' '+(a[1]>0?'+':'−')+a[2]+Math.abs(a[1])).join('   ');
+ G.ph='result';snd(0,f[1]+f[2]+f[3]>=0?784:220,.5);snd(C3,f[1]>=0?660:200,.4)}
+function nextStep(){const nx=steps[G.i+1];if(!nx||nx.first){G.pts.t=(G.pts.t||0)+G.tk.reduce((a,b)=>a+b,0);G.tk=[0,0,0]}
+ if(!nx){G.ph='end';snd(0,880,.6);return}G.i++;G.sel=-1;G.ph=nx.first?'brief':'pick';if(G.ph=='pick'){G.tm=nx.T||0;G.lt=-1}else evSnd()}
+function enter(){const ph=G.ph;
+ if(ph=='intro'){G.i=0;G.ph='brief';evSnd()}
+ else if(ph=='brief'){G.ph='pick';G.tm=steps[G.i].T||0;G.lt=-1}
+ else if(ph=='pick'){if(G.sel<0){snd(0,200,.3);speak('Choose an option first.');return}lock()}
+ else if(ph=='result')nextStep();else G.dq++;
+ render()}
+function pickOpt(i){if(G.ph!='pick'||!steps[G.i].o[i])return;G.sel=i;snd(0,520+i*100,.12);render(0);speak(steps[G.i].o[i][0]+'. '+steps[G.i].o[i][1].replace('\n','. '))}
+
+/* ---------- input (keyboard + mouse; no controllers needed) ---------- */
+const lay=()=>{rot.rotation.y=-(window.YAW||0)*Math.PI/180;pan.forEach(p=>p.scale.setScalar(UI))};
+addEventListener('keydown',e=>{const k=e.key;if(Q)log('key '+k);if(k==' '||k.startsWith('Arrow'))e.preventDefault();
+ if(k>='1'&&k<='3')pickOpt(+k-1);else if(k=='ArrowRight')pickOpt(((G.sel<0?-1:G.sel)+1)%3);else if(k=='ArrowLeft')pickOpt(((G.sel<0?1:G.sel)+2)%3);
+ else if(k=='Enter'||k==' ')enter();
+ else if('qwe'.includes(k)&&k.length==1){const i='qwe'.indexOf(k);G.tk[i]^=1;snd(0,990,.1);render(0)}
+ else if(k=='r'||k=='R')speak(G.say);else if(k=='m'||k=='M'){G.voice^=1;speechSynthesis.cancel()}
+ else if(k=='p'||k=='P')G.pz^=1;else if(k=='t'||k=='T'){G.tm+=30;G.lt=-1}
+ else if(k=='['||k==']'){window.YAW=(window.YAW||0)+(k=='['?-1:1);lay()}
+ else if(k=='-'||k=='='||k=='+'){UI=Math.max(.6,Math.min(1.6,UI+(k=='-'?-.05:.05)));lay();dDb()}
+ else if(k=='ArrowUp'||k=='ArrowDown'){HN+=k=='ArrowUp'?-.05:.05}});
+const rc=new THREE.Raycaster();let dn=null;const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{dn=[e.clientX,e.clientY];if(Q)log('ptr down')});
+cv.addEventListener('pointermove',e=>{if(e.buttons&1&&!renderer.xr.isPresenting){cam.rotation.y-=e.movementX*.004;cam.rotation.x=Math.max(-1,Math.min(1,cam.rotation.x-e.movementY*.004))}});
+cv.addEventListener('pointerup',e=>{if(!dn||Math.hypot(e.clientX-dn[0],e.clientY-dn[1])>5)return;rc.setFromCamera({x:e.clientX/innerWidth*2-1,y:-e.clientY/innerHeight*2+1},cam);const h=rc.intersectObjects(cd.filter(c=>c.visible))[0];
+ if(h){const i=cd.indexOf(h.object);if(G.ph=='pick'&&G.sel==i)enter();else pickOpt(i)}});
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+
+/* ---------- loop ---------- */
+const clock=new THREE.Clock();let fps=60,t0=0,ey=0;
+render(0);lay();
+renderer.setAnimationLoop(()=>{const dt=Math.min(.1,clock.getDelta());fps+=(1/dt-fps)*.05;t0+=dt;
+ if(renderer.xr.isPresenting&&CAL<30){const v=new THREE.Vector3();renderer.xr.getCamera().getWorldPosition(v);ey+=v.y;if(++CAL==30)world.position.y=ey/30-1.6}
+ if(CAL<30&&!renderer.xr.isPresenting)CAL=0,ey=0;
+ world.position.y=(CAL>=30?ey/30-1.6:0)+HN;
+ const s=steps[G.i],surge=G.ph!='intro'&&s.r==3&&!G.end?24:0,n=Math.min(48,3+Math.floor(V[1]/12)+surge);
+ while(cust.length<n)cust.push(mkC());
+ cust.forEach((c,i)=>{c.visible=i<n;const u=c.userData;u.a+=u.v*dt*(surge?1.8:1);if(u.a>172||u.a<HALF+8)u.v*=-1;c.position.set(...polar(u.r,u.a,Math.abs(Math.sin(t0*5+u.ph))*.05))});
+ if(G.ph=='pick'&&s.T&&!G.pz&&G.tm>0){G.tm-=dt;const c=Math.ceil(G.tm);if(c!=G.lt){G.lt=c;dBar();if(G.tm<=0){snd(0,300,.8);snd(C1,300,.8);snd(C3,300,.8)}}}
+ renderer.render(scene,renderer.xr.isPresenting?cam:cam)});
+</script></body></html>
